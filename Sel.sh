@@ -1,7 +1,12 @@
 #!/bin/bash
 clear
 
-
+# Colors for output
+rest="\e[0m"
+green="\e[1;32m"
+yellow="\e[1;33m"
+cyan="\e[1;36m"
+purple="\e[1;35m"
 
 echo -e "\e[1;35m*****************************************"
 echo -e "\e[1;35m*\e[0m \e[1;31mY\e[1;32mO\e[1;33mU\e[1;34mT\e[1;35mU\e[1;36mB\e[1;37mE\e[0m : \e[4;34mKOLANDONE\e[0m         \e[1;35m"
@@ -30,7 +35,6 @@ echo -e "\e[1;36m*****************************************"
 echo -en "\e[1;32mEnter your choice:\e[0m"
 read -r user_input
 
-
 measure_latency() {
     local ip_port=$1
     local ip=$(echo $ip_port | cut -d: -f1)
@@ -51,7 +55,6 @@ measure_latency6() {
     printf "| %-45s | %-10s |\n" "$ip_port" "$latency"
 }
 
-
 display_table_ipv4() {
     printf "+-----------------------+------------+\n"
     printf "| IP:Port               | Latency(ms) |\n"
@@ -67,25 +70,12 @@ display_table_ipv6() {
     echo "$1" | head -n 10 | while read -r ip_port; do measure_latency6 "$ip_port"; done
     printf "+---------------------------------------------+------------+\n"
 }
+
 cloner() {
     if ! command -v wg &>/dev/null; then
-        if [ -d "$PREFIX" ] && [ "$(uname -o)" = "Android" ]; then
-            echo "Installing wireguard-tools"
-            pkg install wireguard-tools -y
-            pkg install jq -y
-        elif [ -x "$(command -v apt)" ]; then
-            echo "Installing wireguard-tools on Debian/Ubuntu"
-            sudo apt update -y && sudo apt install wireguard-tools -y
-        elif [ -x "$(command -v yum)" ]; then
-            echo "Installing wireguard-tools on CentOS/RHEL"
-            sudo yum install epel-release -y && sudo yum install kmod-wireguard wireguard-tools -y
-        elif [ -x "$(command -v dnf)" ]; then
-            echo "Installing wireguard-tools on Fedora"
-            sudo dnf install wireguard-tools -y
-        elif [ -x "$(command -v zypper)" ]; then
-            echo "Installing wireguard-tools on openSUSE"
-            sudo zypper install wireguard-tools -y
-        fi
+        echo "Installing wireguard-tools and jq..."
+        sudo apt update -y
+        sudo apt install wireguard-tools jq -y
     fi
 
     licenses=(
@@ -121,7 +111,6 @@ cloner() {
     read -r input_license
 
     if [ -z "$input_license" ]; then
-        # Choose a random license from the list
         license=$(shuf -n 1 -e "${licenses[@]}")
     else
         license="$input_license"
@@ -131,20 +120,12 @@ cloner() {
     echo -e "${green}Starting...${rest}"
     echo -e "${purple}-------------------------------------${rest}"
     while true; do
-        # Requirements
-        if command -v wg &>/dev/null; then
-            private_key=$(wg genkey)
-            public_key=$(wg pubkey <<<"$private_key")
-        else
-            wg_api=$(curl -m5 -sSL https://wg-key.forvps.gq/)
-            private_key=$(awk 'NR==2 {print $2}' <<<"$wg_api")
-            public_key=$(awk 'NR==1 {print $2}' <<<"$wg_api")
-        fi
+        private_key=$(wg genkey)
+        public_key=$(wg pubkey <<<"$private_key")
         install_id=$(tr -dc 'A-Za-z0-9' </dev/urandom | head -c 22)
         fcm_token="${install_id}:APA91b$(tr -dc 'A-Za-z0-9' </dev/urandom | head -c 134)"
         rand=$(tr -dc '0-9' </dev/urandom | head -c 3)
 
-        # Register
         response=$(curl --request POST "https://api.cloudflareclient.com/v0a${rand}/reg" \
             --silent \
             --location \
@@ -163,8 +144,6 @@ cloner() {
             }')
 
         echo "$response" | jq . >warp-config.json
-        # ___________________________________________
-        # Change License
         id=$(jq -r '.id' <warp-config.json)
         token=$(jq -r '.token' <warp-config.json)
 
@@ -179,8 +158,6 @@ cloner() {
                 "license": "'"$license"'"
             }')
 
-        # ___________________________________________
-        # Patch Account
         patch_one_response=$(curl -X PATCH "https://api.cloudflareclient.com/v0a${rand}/reg/${id}/account" \
             --silent \
             --location \
@@ -190,8 +167,6 @@ cloner() {
             --header "Authorization: Bearer ${token}" \
             --data '{"active": true}')
 
-        # ___________________________________________
-        # Get Data
         get_response=$(curl -X GET "https://api.cloudflareclient.com/v0a${rand}/reg/${id}" \
             --silent \
             --header "Authorization: Bearer ${token}" \
@@ -205,10 +180,6 @@ cloner() {
         balance=$(echo "$get_response" | jq -r '.account.quota')
         quota=$((balance / 1000000000))
 
-        # ___________________________________________
-        # Change License Again
-        license=$(jq -r '.account.license' <warp-config.json)
-
         response=$(curl --request PUT "https://api.cloudflareclient.com/v0a${rand}/reg/${id}/account" \
             --silent \
             --location \
@@ -220,8 +191,6 @@ cloner() {
                 "license": "'"$license"'"
             }')
 
-        # ___________________________________________
-        # Patch Account Again
         patch_two_response=$(curl -X PATCH "https://api.cloudflareclient.com/v0a${rand}/reg/${id}/account" \
             --silent \
             --location \
@@ -238,8 +207,6 @@ cloner() {
             echo "$license | $quota" >>output.txt
         fi
 
-        # ___________________________________________
-        # Delete Account
         response=$(curl -s -o /dev/null -w "%{http_code}" -X DELETE "https://api.cloudflareclient.com/v0a${rand}/reg/${id}" \
             --header "Authorization: Bearer ${token}" \
             --header "Accept: application/json" \
@@ -254,7 +221,6 @@ cloner() {
         sleep 2
     done
 }
-
 
 # Execute the chosen option
 if [ "$user_input" -eq 1 ]; then
@@ -298,6 +264,6 @@ elif [ "$user_input" -eq 14 ]; then
 elif [ "$user_input" -eq 99 ]; then
     bash <(curl -fsSL https://raw.githubusercontent.com/Kolandone/Selector/main/install.sh)
     echo -e "\e[1;32mAfter this, you can run the Selector with \e[1;36mkl \e[1;32mcommand\e[0m"
-    else 
+else
     echo "Invalid input. Please enter between 1 and 14"
 fi
